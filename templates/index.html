@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BTC Rules Script</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <span class="logo-icon">₿</span>
+                    <h1>BTC Rules Script</h1>
+                </div>
+                <div class="header-nav">
+                    <button class="nav-link active" data-tab="dashboard">Dashboard</button>
+                    <button class="nav-link" data-tab="settings">Settings ⚙️</button>
+                </div>
+
+                <div class="header-stats" id="dashboardStats">
+                    <div class="stat-card">
+                        <div class="stat-label">BTC Price</div>
+                        <div class="stat-value" id="btcPrice" style="color: var(--accent-primary);">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Active Coins</div>
+                        <div class="stat-value" id="totalPositions">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total PnL</div>
+                        <div class="stat-value" id="totalPnL">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Status</div>
+                        <div class="stat-value">
+                            <span class="status-dot" id="statusDot"></span>
+                            <span id="statusText">Connecting...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="main-content">
+        <div class="container">
+            <div id="dashboardTab" class="tab-content active">
+                <div class="controls">
+                    <button class="btn btn-primary" id="refreshBtn">
+                        Refresh Coins
+                    </button>
+                    <div class="toggle-group">
+                        <button class="toggle-btn active" data-category="all">All Coins</button>
+                        <button class="toggle-btn" data-category="linear">Futures</button>
+                        <button class="toggle-btn" data-category="spot">Spot</button>
+                    </div>
+                </div>
+
+                <div class="positions-container">
+                    <div id="positionsGrid" class="positions-grid">
+                        <div class="loading-state">
+                            <div class="spinner"></div>
+                            <p>Loading positions...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="emptyState" class="empty-state" style="display: none;">
+                    <h2>No Active Coins</h2>
+                    <p>You don't have any active coins at the moment.</p>
+                    <p class="empty-hint">Open positions on Bybit to apply BTC rules.</p>
+                </div>
+
+                <div id="errorState" class="error-state" style="display: none;">
+                    <h2>Connection Error</h2>
+                    <p id="errorMessage">Unable to fetch coins. Please check your API credentials.</p>
+                    <button class="btn btn-secondary" onclick="location.reload()">Retry</button>
+                </div>
+            </div>
+
+            <div id="settingsTab" class="tab-content" style="display: none;">
+                <div class="settings-container" style="max-width: 800px; margin: 0 auto;">
+                    <h2 style="margin-bottom: 2rem;">API Configuration</h2>
+
+                    <div id="successMessage" class="alert alert-success" style="display: none;">
+                        Settings saved successfully!
+                    </div>
+
+                    <div id="errorMessageSettings" class="alert alert-error" style="display: none;"></div>
+
+                    <form id="settingsForm" class="settings-form">
+                        <div class="form-group">
+                            <label for="apiKey">Bybit API Key</label>
+                            <input
+                                type="text"
+                                id="apiKey"
+                                name="apiKey"
+                                class="form-input"
+                                placeholder="Enter your Bybit API Key"
+                                value="{{ api_key or '' }}"
+                            >
+                            <small class="form-hint">Get your API key from Bybit account settings</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="apiSecret">Bybit API Secret</label>
+                            <input
+                                type="password"
+                                id="apiSecret"
+                                name="apiSecret"
+                                class="form-input"
+                                placeholder="Enter your Bybit API Secret"
+                                value="{{ api_secret or '' }}"
+                            >
+                            <small class="form-hint">Keep this secret secure!</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input
+                                    type="checkbox"
+                                    id="demo"
+                                    name="demo"
+                                    {{ 'checked' if demo else '' }}
+                                >
+                                <span>Use Demo Account (api-demo.bybit.com)</span>
+                            </label>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input
+                                    type="checkbox"
+                                    id="testnet"
+                                    name="testnet"
+                                    {{ 'checked' if testnet else '' }}
+                                >
+                                <span>Use Testnet (api-testnet.bybit.com)</span>
+                            </label>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">
+                                Save Settings
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="switchTab('dashboard')">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+
+                    <div class="info-card" style="margin-top: 2rem;">
+                        <h3>How to get your API credentials:</h3>
+                        <ol style="margin-left: 1.5rem; color: var(--text-secondary);">
+                            <li>Log in to your Bybit account</li>
+                            <li>Go to Account & Security → API Management</li>
+                            <li>Create a new API key (select "Read" permission minimum)</li>
+                            <li>Copy the API Key and Secret</li>
+                            <li>Paste them above and click Save</li>
+                        </ol>
+                        <p style="margin-top: 1rem; color: var(--warning);">
+                            <strong>Note:</strong> Your credentials are stored in a .env file on your local machine. Never share them with anyone!
+                        </p>
+                        <div style="margin-top: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: 0.5rem; border: 1px solid var(--border);">
+                            <strong style="color: var(--accent-primary);">Environment Options:</strong>
+                            <ul style="margin-top: 0.5rem; margin-left: 1.5rem; color: var(--text-secondary); font-size: 0.875rem;">
+                                <li><strong>Demo:</strong> Use demo account credentials (api-demo.bybit.com)</li>
+                                <li><strong>Testnet:</strong> Use testnet for testing (api-testnet.bybit.com)</li>
+                                <li><strong>Neither:</strong> Production trading (api.bybit.com)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <p>BTC Rules Script &copy; 2025 | Powered by Bybit API</p>
+        </div>
+    </footer>
+
+    <div id="positionModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Apply Rules</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modalBody">
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script>
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => {
+                tab.style.display = 'none';
+            });
+
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            const selectedTab = document.getElementById(tabName + 'Tab');
+            if (selectedTab) {
+                selectedTab.style.display = 'block';
+            }
+
+            const selectedLink = document.querySelector(`[data-tab="${tabName}"]`);
+            if (selectedLink) {
+                selectedLink.classList.add('active');
+            }
+
+            const dashboardStats = document.getElementById('dashboardStats');
+            if (tabName === 'dashboard') {
+                dashboardStats.style.visibility = 'visible';
+                dashboardStats.style.opacity = '1';
+            } else {
+                dashboardStats.style.visibility = 'hidden';
+                dashboardStats.style.opacity = '0';
+            }
+        }
+
+        document.querySelectorAll('.nav-link').forEach(link => {
+            link.addEventListener('click', function() {
+                const tabName = this.getAttribute('data-tab');
+                switchTab(tabName);
+            });
+        });
+
+
+        document.getElementById('settingsForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = {
+                apiKey: document.getElementById('apiKey').value,
+                apiSecret: document.getElementById('apiSecret').value,
+                demo: document.getElementById('demo').checked,
+                testnet: document.getElementById('testnet').checked
+            };
+
+            try {
+                const response = await fetch('/api/save-settings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    document.getElementById('successMessage').style.display = 'block';
+                    document.getElementById('errorMessageSettings').style.display = 'none';
+
+                    setTimeout(() => {
+                        document.getElementById('successMessage').style.display = 'none';
+                        switchTab('dashboard');
+                        if (typeof loadPositions === 'function') {
+                            loadPositions();
+                        }
+                    }, 2000);
+                } else {
+                    document.getElementById('errorMessageSettings').textContent = result.error || 'Failed to save settings';
+                    document.getElementById('errorMessageSettings').style.display = 'block';
+                    document.getElementById('successMessage').style.display = 'none';
+                }
+            } catch (error) {
+                document.getElementById('errorMessageSettings').textContent = 'Error: ' + error.message;
+                document.getElementById('errorMessageSettings').style.display = 'block';
+                document.getElementById('successMessage').style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
