@@ -2,14 +2,50 @@ from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv, set_key, find_dotenv
 import os
 import sys
+import platform
 
 import asyncio
 from functools import wraps
 
+def get_config_dir():
+    """Get the proper config directory for storing credentials and data.
+
+    On Mac .app bundles, the executable is inside the bundle and not writable.
+    We use a user-accessible location instead.
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        exe_dir = os.path.dirname(sys.executable)
+
+        # Check if we're in a Mac .app bundle (path contains .app/Contents/MacOS)
+        if '.app/Contents/MacOS' in exe_dir or '.app\\Contents\\MacOS' in exe_dir:
+            # Mac .app bundle - use user's home directory
+            config_dir = os.path.join(os.path.expanduser('~'), '.btcrules')
+        else:
+            # Windows .exe or Linux binary - use exe directory
+            config_dir = exe_dir
+    else:
+        # Running from source
+        config_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Ensure config directory exists
+    if not os.path.exists(config_dir):
+        os.makedirs(config_dir, exist_ok=True)
+
+    return config_dir
+
+# Get the appropriate directories
+CONFIG_DIR = get_config_dir()
+
+# For templates and static files, we need the app directory
 if getattr(sys, 'frozen', False):
-    APP_DIR = os.path.dirname(sys.executable)
+    APP_DIR = sys._MEIPASS if hasattr(sys, '_MEIPASS') else os.path.dirname(sys.executable)
 else:
     APP_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Print config location for debugging
+print(f"[CONFIG] Config directory: {CONFIG_DIR}")
+print(f"[CONFIG] App directory: {APP_DIR}")
 
 
 from services.bybit_client import BybitClient
@@ -18,7 +54,10 @@ from services.position_monitor import PositionMonitor
 from services.wallet_manager import WalletManager
 from services.tp_sl_monitor import TPSLMonitor
 
-load_dotenv(os.path.join(APP_DIR, 'env'))
+# Load env from config directory (user-accessible location)
+ENV_FILE = os.path.join(CONFIG_DIR, 'env')
+print(f"[CONFIG] Env file: {ENV_FILE}")
+load_dotenv(ENV_FILE)
 
 
 app = Flask(__name__)
@@ -35,7 +74,7 @@ symbol_validator = SymbolValidator(bybit_client)
 
 position_monitor = PositionMonitor(bybit_client)
 wallet_manager = WalletManager(bybit_client)
-tp_sl_monitor = TPSLMonitor(bybit_client, position_monitor, symbol_validator)
+tp_sl_monitor = TPSLMonitor(bybit_client, position_monitor, symbol_validator, config_dir=CONFIG_DIR)
 
 
 def async_route(f):
@@ -83,7 +122,7 @@ def reinitialize_services():
     position_monitor = PositionMonitor(bybit_client)
     wallet_manager = WalletManager(bybit_client)
     wallet_manager.spot_entry_prices = old_entry_prices
-    tp_sl_monitor = TPSLMonitor(bybit_client, position_monitor, symbol_validator)
+    tp_sl_monitor = TPSLMonitor(bybit_client, position_monitor, symbol_validator, config_dir=CONFIG_DIR)
 
 
 @app.route('/api/save-settings', methods=['POST'])
@@ -96,7 +135,8 @@ def save_settings():
         testnet = data.get('testnet', False)
         demo = data.get('demo', False)
 
-        env_file = os.path.join(APP_DIR, 'env')
+        # Use CONFIG_DIR for env file (user-accessible location)
+        env_file = os.path.join(CONFIG_DIR, 'env')
 
         if not os.path.exists(env_file):
             with open(env_file, 'w') as f:
@@ -108,6 +148,7 @@ def save_settings():
         set_key(env_file, 'BYBIT_DEMO', 'true' if demo else 'false')
 
         load_dotenv(env_file, override=True)
+        print(f"[SETTINGS] Saved credentials to: {env_file}")
 
         reinitialize_services()
 

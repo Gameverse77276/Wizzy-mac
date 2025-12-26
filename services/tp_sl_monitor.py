@@ -8,14 +8,21 @@ from datetime import datetime
 
 class TPSLMonitor:
 
-    def __init__(self, bybit_client, position_monitor, symbol_validator):
+    def __init__(self, bybit_client, position_monitor, symbol_validator, config_dir=None):
         self.bybit_client = bybit_client
         self.position_monitor = position_monitor
         self.symbol_validator = symbol_validator
         self.monitors: Dict[str, Dict] = {}
 
         self.monitoring_tasks: Dict[str, asyncio.Task] = {}
-        self.storage_file = "btc_rules.json"
+
+        # Use config_dir if provided, otherwise use current directory
+        if config_dir:
+            self.storage_file = os.path.join(config_dir, "btc_rules.json")
+        else:
+            self.storage_file = "btc_rules.json"
+
+        print(f"[CONFIG] BTC rules storage: {self.storage_file}")
         self.load_monitors()
 
     def load_monitors(self):
