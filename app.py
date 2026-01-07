@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify, request
-from dotenv import load_dotenv, set_key, find_dotenv
+import keyring
 import os
 import sys
 import platform
@@ -7,20 +7,32 @@ import platform
 import asyncio
 from functools import wraps
 
-def get_config_dir():
-    """Get the proper config directory for storing credentials and data.
+# ============================================================================
+# CONFIGURATION - Using OS Keychain for credentials (secure, no file issues)
+# ============================================================================
 
-    On Mac .app bundles, the executable is inside the bundle and not writable.
-    We use a user-accessible location instead.
+SERVICE_NAME = "BTCRulesScript"  # Keyring service name
+
+
+def get_config_dir():
+    """Get the proper config directory for storing data files (like btc_rules.json).
+
+    On Mac: ~/Library/Application Support/BTCRulesScript/
+    On Windows: Same directory as .exe (or source directory)
     """
     if getattr(sys, 'frozen', False):
         # Running as compiled executable
         exe_dir = os.path.dirname(sys.executable)
 
-        # Check if we're in a Mac .app bundle (path contains .app/Contents/MacOS)
+        # Check if we're in a Mac .app bundle
         if '.app/Contents/MacOS' in exe_dir or '.app\\Contents\\MacOS' in exe_dir:
-            # Mac .app bundle - use user's home directory
-            config_dir = os.path.join(os.path.expanduser('~'), '.btcrules')
+            # Mac .app bundle - use Application Support folder (Apple recommended)
+            config_dir = os.path.join(
+                os.path.expanduser('~'),
+                'Library',
+                'Application Support',
+                'BTCRulesScript'
+            )
         else:
             # Windows .exe or Linux binary - use exe directory
             config_dir = exe_dir
@@ -30,9 +42,41 @@ def get_config_dir():
 
     # Ensure config directory exists
     if not os.path.exists(config_dir):
-        os.makedirs(config_dir, exist_ok=True)
+        try:
+            os.makedirs(config_dir, exist_ok=True)
+            print(f"[CONFIG] Created config directory: {config_dir}")
+        except Exception as e:
+            print(f"[CONFIG] Warning: Could not create config dir: {e}")
 
     return config_dir
+
+
+def get_credential(key):
+    """Get a credential from the OS keychain."""
+    try:
+        value = keyring.get_password(SERVICE_NAME, key)
+        return value if value else ""
+    except Exception as e:
+        print(f"[KEYRING] Error getting {key}: {e}")
+        return ""
+
+
+def set_credential(key, value):
+    """Set a credential in the OS keychain."""
+    try:
+        if value:
+            keyring.set_password(SERVICE_NAME, key, value)
+        else:
+            # Delete the credential if value is empty
+            try:
+                keyring.delete_password(SERVICE_NAME, key)
+            except keyring.errors.PasswordDeleteError:
+                pass  # Key didn't exist, that's fine
+        return True
+    except Exception as e:
+        print(f"[KEYRING] Error setting {key}: {e}")
+        return False
+
 
 # Get the appropriate directories
 CONFIG_DIR = get_config_dir()
@@ -46,6 +90,7 @@ else:
 # Print config location for debugging
 print(f"[CONFIG] Config directory: {CONFIG_DIR}")
 print(f"[CONFIG] App directory: {APP_DIR}")
+print(f"[CONFIG] Using OS Keychain for credentials (service: {SERVICE_NAME})")
 
 
 from services.bybit_client import BybitClient
@@ -54,20 +99,17 @@ from services.position_monitor import PositionMonitor
 from services.wallet_manager import WalletManager
 from services.tp_sl_monitor import TPSLMonitor
 
-# Load env from config directory (user-accessible location)
-ENV_FILE = os.path.join(CONFIG_DIR, 'env')
-print(f"[CONFIG] Env file: {ENV_FILE}")
-load_dotenv(ENV_FILE)
-
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trade-manager-secret-key'
 
+# Load credentials from OS Keychain
+print(f"[CONFIG] Loading credentials from OS Keychain...")
 bybit_client = BybitClient(
-    api_key=os.getenv("BYBIT_API_KEY", ""),
-    api_secret=os.getenv("BYBIT_API_SECRET", ""),
-    testnet=os.getenv("BYBIT_TESTNET", "false").lower() == "true",
-    demo=os.getenv("BYBIT_DEMO", "false").lower() == "true"
+    api_key=get_credential("api_key"),
+    api_secret=get_credential("api_secret"),
+    testnet=get_credential("testnet") == "true",
+    demo=get_credential("demo") == "true"
 )
 
 symbol_validator = SymbolValidator(bybit_client)
@@ -91,13 +133,15 @@ def async_route(f):
 
 @app.route('/')
 def index():
-    has_credentials = bool(os.getenv('BYBIT_API_KEY') and os.getenv('BYBIT_API_SECRET'))
+    api_key = get_credential("api_key")
+    api_secret = get_credential("api_secret")
+    has_credentials = bool(api_key and api_secret)
     return render_template('index.html',
                          has_credentials=has_credentials,
-                         api_key=os.getenv('BYBIT_API_KEY', ''),
-                         api_secret=os.getenv('BYBIT_API_SECRET', ''),
-                         testnet=os.getenv('BYBIT_TESTNET', 'false').lower() == 'true',
-                         demo=os.getenv('BYBIT_DEMO', 'false').lower() == 'true')
+                         api_key=api_key,
+                         api_secret=api_secret,
+                         testnet=get_credential("testnet") == "true",
+                         demo=get_credential("demo") == "true")
 
 
 @app.route('/settings')
@@ -111,11 +155,12 @@ def reinitialize_services():
 
     old_entry_prices = wallet_manager.spot_entry_prices.copy() if wallet_manager else {}
 
+    # Load credentials from OS Keychain
     bybit_client = BybitClient(
-        api_key=os.getenv("BYBIT_API_KEY", ""),
-        api_secret=os.getenv("BYBIT_API_SECRET", ""),
-        testnet=os.getenv("BYBIT_TESTNET", "false").lower() == "true",
-        demo=os.getenv("BYBIT_DEMO", "false").lower() == "true"
+        api_key=get_credential("api_key"),
+        api_secret=get_credential("api_secret"),
+        testnet=get_credential("testnet") == "true",
+        demo=get_credential("demo") == "true"
     )
 
     symbol_validator = SymbolValidator(bybit_client)
@@ -131,31 +176,24 @@ def save_settings():
         data = request.json
         api_key = data.get('apiKey', '')
         api_secret = data.get('apiSecret', '')
-
         testnet = data.get('testnet', False)
         demo = data.get('demo', False)
 
-        # Use CONFIG_DIR for env file (user-accessible location)
-        env_file = os.path.join(CONFIG_DIR, 'env')
+        # Save credentials to OS Keychain (secure, no file permission issues)
+        set_credential("api_key", api_key)
+        set_credential("api_secret", api_secret)
+        set_credential("testnet", "true" if testnet else "false")
+        set_credential("demo", "true" if demo else "false")
 
-        if not os.path.exists(env_file):
-            with open(env_file, 'w') as f:
-                f.write('')
-
-        set_key(env_file, 'BYBIT_API_KEY', api_key)
-        set_key(env_file, 'BYBIT_API_SECRET', api_secret)
-        set_key(env_file, 'BYBIT_TESTNET', 'true' if testnet else 'false')
-        set_key(env_file, 'BYBIT_DEMO', 'true' if demo else 'false')
-
-        load_dotenv(env_file, override=True)
-        print(f"[SETTINGS] Saved credentials to: {env_file}")
+        print(f"[SETTINGS] Saved credentials to OS Keychain (service: {SERVICE_NAME})")
 
         reinitialize_services()
 
         print(f"[SETTINGS] Reinitialized with demo={demo}, testnet={testnet}")
 
-        return jsonify({"success": True, "message": "Settings saved successfully"})
+        return jsonify({"success": True, "message": "Settings saved to OS Keychain successfully"})
     except Exception as e:
+        print(f"[SETTINGS] Error saving settings: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -164,9 +202,9 @@ def save_settings():
 @async_route
 async def get_positions():
     try:
-        if not os.getenv("BYBIT_API_KEY") or not os.getenv("BYBIT_API_SECRET"):
+        if not get_credential("api_key") or not get_credential("api_secret"):
             return jsonify({
-                "error": "API credentials not configured. Please set BYBIT_API_KEY and BYBIT_API_SECRET in settings"
+                "error": "API credentials not configured. Please set your API credentials in settings."
             }), 400
 
         category = request.args.get('category', 'linear')
