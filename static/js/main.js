@@ -810,18 +810,18 @@ function renderPartialCloseRules() {
     }, 0);
 
     container.innerHTML = `
-        <div style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(245, 158, 11, 0.1); border-radius: 0.375rem; font-size: 0.875rem; color: var(--warning); font-weight: 600;">
+        <div id="partialCloseTotalDisplay" style="margin-bottom: 0.5rem; padding: 0.5rem; background: rgba(245, 158, 11, 0.1); border-radius: 0.375rem; font-size: 0.875rem; color: var(--warning); font-weight: 600;">
             Total to close: ${totalPercent}% of original position
         </div>
         ${partialCloseRules.map((rule, idx) => `
-            <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 0.5rem;">
+            <div class="partial-close-rule-row" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-bottom: 0.5rem; padding: 0.75rem; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 0.5rem;">
                 <div>
                     <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">BTC Price</label>
-                    <input type="number" step="0.01" placeholder="e.g. 95000" value="${rule.btc_price}" oninput="updatePartialCloseRule(${idx}, 'btc_price', this.value)" class="form-input" style="width: 100%; padding: 0.5rem; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 0.375rem; color: var(--text-primary); font-size: 0.875rem;">
+                    <input type="number" step="0.01" placeholder="e.g. 95000" value="${rule.btc_price}" id="partial_btc_${idx}" oninput="updatePartialCloseRule(${idx}, 'btc_price', this.value)" onchange="updatePartialCloseRule(${idx}, 'btc_price', this.value)" class="form-input partial-btc-input" style="width: 100%; padding: 0.5rem; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 0.375rem; color: var(--text-primary); font-size: 0.875rem;">
                 </div>
                 <div>
                     <label style="font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.25rem;">Close %</label>
-                    <input type="number" step="1" placeholder="50" value="${rule.close_percent}" oninput="updatePartialCloseRule(${idx}, 'close_percent', this.value)" class="form-input" style="width: 100%; padding: 0.5rem; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 0.375rem; color: var(--text-primary); font-size: 0.875rem;">
+                    <input type="number" step="1" placeholder="50" value="${rule.close_percent}" id="partial_percent_${idx}" oninput="updatePartialCloseRule(${idx}, 'close_percent', this.value)" onchange="updatePartialCloseRule(${idx}, 'close_percent', this.value)" class="form-input partial-percent-input" style="width: 100%; padding: 0.5rem; background: var(--bg-primary); border: 1px solid var(--border); border-radius: 0.375rem; color: var(--text-primary); font-size: 0.875rem;">
                 </div>
                 <div style="display: flex; align-items: flex-end;">
                     <button type="button" class="btn btn-secondary" style="padding: 0.5rem 0.75rem; height: fit-content;" onclick="removePartialCloseRule(${idx})">✕</button>
@@ -850,6 +850,9 @@ function updatePartialCloseRule(index, field, value) {
 async function saveRules(symbol, category, side, size) {
     const rules = [];
 
+    console.log('[DEBUG] saveRules called');
+    console.log('[DEBUG] partialCloseRules array:', JSON.stringify(partialCloseRules));
+
     if (document.getElementById('rule1Toggle').checked) {
         const btcPrice = parseFloat(document.getElementById('rule1BtcPrice').value);
         if (btcPrice) {
@@ -860,15 +863,29 @@ async function saveRules(symbol, category, side, size) {
         }
     }
 
-    partialCloseRules.forEach(rule => {
-        const btcPrice = parseFloat(rule.btc_price);
-        const closePercent = parseFloat(rule.close_percent);
-        if (btcPrice && closePercent) {
-            rules.push({
-                type: 'partial_close',
-                btc_price: btcPrice,
-                close_percent: closePercent
-            });
+    // Collect partial close rules - read directly from DOM inputs as primary source
+    // This fixes issues where oninput events might not fire on some browsers (Safari/Mac)
+    const partialCloseRows = document.querySelectorAll('.partial-close-rule-row');
+    console.log('[DEBUG] Found partial close rows:', partialCloseRows.length);
+
+    partialCloseRows.forEach((row, idx) => {
+        const btcInput = row.querySelector('.partial-btc-input');
+        const percentInput = row.querySelector('.partial-percent-input');
+
+        if (btcInput && percentInput) {
+            const btcPrice = parseFloat(btcInput.value);
+            const closePercent = parseFloat(percentInput.value);
+            console.log(`[DEBUG] Row ${idx} - DOM values: btcPrice=${btcInput.value}, closePercent=${percentInput.value}`);
+            console.log(`[DEBUG] Row ${idx} - Parsed: btcPrice=${btcPrice}, closePercent=${closePercent}`);
+
+            if (btcPrice && closePercent) {
+                rules.push({
+                    type: 'partial_close',
+                    btc_price: btcPrice,
+                    close_percent: closePercent
+                });
+                console.log('[DEBUG] Added partial_close rule from DOM');
+            }
         }
     });
 
