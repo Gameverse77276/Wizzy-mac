@@ -1,5 +1,5 @@
 from flask import Flask, render_template, jsonify, request
-import keyring
+import json
 import os
 import sys
 import platform
@@ -8,14 +8,16 @@ import asyncio
 from functools import wraps
 
 # ============================================================================
-# CONFIGURATION - Using OS Keychain for credentials (secure, no file issues)
+# CONFIGURATION - Using JSON config file for credentials
+# Mac: ~/Library/Application Support/BTCRulesScript/config.json
+# Windows: Same directory as .exe (or source directory)
 # ============================================================================
 
-SERVICE_NAME = "BTCRulesScript"  # Keyring service name
+CONFIG_FILE_NAME = "config.json"
 
 
 def get_config_dir():
-    """Get the proper config directory for storing data files (like btc_rules.json).
+    """Get the proper config directory for storing data files.
 
     On Mac: ~/Library/Application Support/BTCRulesScript/
     On Windows: Same directory as .exe (or source directory)
@@ -51,31 +53,49 @@ def get_config_dir():
     return config_dir
 
 
-def get_credential(key):
-    """Get a credential from the OS keychain."""
+def _get_config_file_path():
+    """Get the full path to the config file."""
+    return os.path.join(CONFIG_DIR, CONFIG_FILE_NAME)
+
+
+def _load_config():
+    """Load all config from JSON file."""
+    config_path = _get_config_file_path()
     try:
-        value = keyring.get_password(SERVICE_NAME, key)
-        return value if value else ""
+        if os.path.exists(config_path):
+            with open(config_path, 'r') as f:
+                return json.load(f)
     except Exception as e:
-        print(f"[KEYRING] Error getting {key}: {e}")
-        return ""
+        print(f"[CONFIG] Error loading config: {e}")
+    return {}
+
+
+def _save_config(config):
+    """Save all config to JSON file."""
+    config_path = _get_config_file_path()
+    try:
+        with open(config_path, 'w') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"[CONFIG] Error saving config: {e}")
+        return False
+
+
+def get_credential(key):
+    """Get a credential from the config file."""
+    config = _load_config()
+    return config.get(key, "")
 
 
 def set_credential(key, value):
-    """Set a credential in the OS keychain."""
-    try:
-        if value:
-            keyring.set_password(SERVICE_NAME, key, value)
-        else:
-            # Delete the credential if value is empty
-            try:
-                keyring.delete_password(SERVICE_NAME, key)
-            except keyring.errors.PasswordDeleteError:
-                pass  # Key didn't exist, that's fine
-        return True
-    except Exception as e:
-        print(f"[KEYRING] Error setting {key}: {e}")
-        return False
+    """Set a credential in the config file."""
+    config = _load_config()
+    if value:
+        config[key] = value
+    elif key in config:
+        del config[key]
+    return _save_config(config)
 
 
 # Get the appropriate directories
@@ -89,8 +109,8 @@ else:
 
 # Print config location for debugging
 print(f"[CONFIG] Config directory: {CONFIG_DIR}")
+print(f"[CONFIG] Config file: {_get_config_file_path()}")
 print(f"[CONFIG] App directory: {APP_DIR}")
-print(f"[CONFIG] Using OS Keychain for credentials (service: {SERVICE_NAME})")
 
 
 from services.bybit_client import BybitClient
@@ -103,8 +123,8 @@ from services.tp_sl_monitor import TPSLMonitor
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'trade-manager-secret-key'
 
-# Load credentials from OS Keychain
-print(f"[CONFIG] Loading credentials from OS Keychain...")
+# Load credentials from config file
+print(f"[CONFIG] Loading credentials from config file...")
 bybit_client = BybitClient(
     api_key=get_credential("api_key"),
     api_secret=get_credential("api_secret"),
@@ -155,7 +175,7 @@ def reinitialize_services():
 
     old_entry_prices = wallet_manager.spot_entry_prices.copy() if wallet_manager else {}
 
-    # Load credentials from OS Keychain
+    # Load credentials from config file
     bybit_client = BybitClient(
         api_key=get_credential("api_key"),
         api_secret=get_credential("api_secret"),
@@ -179,19 +199,19 @@ def save_settings():
         testnet = data.get('testnet', False)
         demo = data.get('demo', False)
 
-        # Save credentials to OS Keychain (secure, no file permission issues)
+        # Save credentials to config file
         set_credential("api_key", api_key)
         set_credential("api_secret", api_secret)
         set_credential("testnet", "true" if testnet else "false")
         set_credential("demo", "true" if demo else "false")
 
-        print(f"[SETTINGS] Saved credentials to OS Keychain (service: {SERVICE_NAME})")
+        print(f"[SETTINGS] Saved credentials to config file")
 
         reinitialize_services()
 
         print(f"[SETTINGS] Reinitialized with demo={demo}, testnet={testnet}")
 
-        return jsonify({"success": True, "message": "Settings saved to OS Keychain successfully"})
+        return jsonify({"success": True, "message": "Settings saved successfully"})
     except Exception as e:
         print(f"[SETTINGS] Error saving settings: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
