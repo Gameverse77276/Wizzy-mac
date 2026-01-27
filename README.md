@@ -2,6 +2,28 @@
 
 Automated BTC-triggered trading rules for Bybit positions.
 
+## Quick Start
+
+### Requirements
+
+- **Python 3.8+** - Download from https://www.python.org/downloads/
+  - **Important (Windows)**: Check "Add Python to PATH" during installation!
+
+### Running the App
+
+**Mac:**
+1. Double-click `run_mac.command`
+2. If it won't open, right-click → Open → Open
+3. The browser will open automatically
+
+**Windows:**
+1. Double-click `run_windows.bat`
+2. The browser will open automatically
+
+That's it! Dependencies install automatically on first run.
+
+---
+
 ## Features
 
 - **BTC-Triggered Rules**: Automatically execute trades when BTC reaches specific prices
@@ -10,102 +32,13 @@ Automated BTC-triggered trading rules for Bybit positions.
   - Rule 2: Partial close (add multiple rules at different BTC prices)
   - Rule 3: Set Take Profit
   - Rule 4: Set Stop Loss (always 100% close)
-- **Real-time BTC Price Monitoring**
+- **Real-time BTC Price Monitoring** (every 2 seconds)
 - **Position Tracking**: Track closed vs remaining position percentages
 - **Bi-directional Triggers**: Rules trigger when BTC crosses price going up OR down
 
-## Download Pre-built Apps
-
-### GitHub Actions (Easiest!)
-
-1. Go to the [Actions tab](https://github.com/Gameverse77276/Wizzy-mac/actions)
-2. Click on the latest successful workflow run
-3. Scroll down to "Artifacts"
-4. Download:
-   - **BTCRulesScript-macOS** - The .app file
-   - **BTCRulesScript-macOS-DMG** - DMG installer (if available)
-
-### Manual Trigger
-
-You can also manually trigger a build:
-1. Go to [Actions tab](https://github.com/Gameverse77276/Wizzy-mac/actions)
-2. Click "Build macOS App" workflow
-3. Click "Run workflow" button
-4. Wait for build to complete
-5. Download the artifact
-
-## Installation
-
-### macOS
-
-1. Download `BTCRulesScript-macOS` artifact from GitHub Actions
-2. Unzip the downloaded file
-3. Right-click `BTCRulesScript.app` → Open (first time only, to bypass Gatekeeper)
-4. Or run in Terminal: `xattr -cr BTCRulesScript.app && open BTCRulesScript.app`
-
-### Windows
-
-1. Download the Windows .exe (if available in releases)
-2. Double-click `BTCRulesScript.exe`
-3. Allow through Windows Defender if prompted
-
-## Running from Source
-
-### Requirements
-
-- Python 3.8+
-- Dependencies: `pip install -r requirements.txt`
-
-### Start the Application
-
-```bash
-python launcher.py
-```
-
-Or:
-
-```bash
-python app.py
-```
-
-Then open your browser to `http://127.0.0.1:5000`
-
-## Configuration
-
-Set your Bybit API credentials as environment variables:
-
-```bash
-export BYBIT_API_KEY="your_api_key"
-export BYBIT_API_SECRET="your_api_secret"
-export BYBIT_TESTNET="false"  # Use "true" for testnet
-export BYBIT_DEMO="false"     # Use "true" for demo trading
-```
-
-Or the app will prompt you to enter them on first run.
-
-## Building from Source
-
-### macOS
-
-```bash
-# Make build script executable
-chmod +x build_mac.sh
-
-# Build
-./build_mac.sh
-```
-
-See [README_MAC.md](README_MAC.md) for detailed instructions.
-
-### Windows
-
-```bash
-pyinstaller --onefile --name BTCRulesScript --add-data "templates;templates" --add-data "static;static" --add-data "services;services" launcher.py
-```
-
 ## Usage
 
-1. **Connect Bybit API**: Enter your API credentials
+1. **Connect Bybit API**: Enter your API credentials on the settings page
 2. **View Positions**: See all your open positions with real-time prices
 3. **Apply Rules**: Click "Apply Rules" on any position
 4. **Configure Rules**:
@@ -124,36 +57,36 @@ pyinstaller --onefile --name BTCRulesScript --add-data "templates;templates" --a
 - Triggered rules are marked and won't execute again
 - Position tracking shows closed vs remaining percentages
 
-## Architecture
-
-- **Frontend**: HTML/CSS/JavaScript (dark theme UI)
-- **Backend**: Flask Python REST API
-- **Monitoring**: Async position and BTC price monitoring
-- **Exchange**: Bybit API v5 integration
-
 ## Troubleshooting
 
-### macOS: "App can't be opened"
-```bash
-xattr -cr BTCRulesScript.app
-```
-
 ### Port 5000 in use
-**macOS:**
+
+**Mac:**
 ```bash
 kill -9 $(lsof -ti:5000)
 ```
 
 **Windows:**
-```bash
+```cmd
 netstat -ano | findstr :5000
 taskkill /F /PID <PID>
 ```
 
+### Mac: "unidentified developer" warning
+Right-click → Open → Open
+
+### Manual Run (if launcher scripts don't work)
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+## Config File Location
+
+Your API credentials are saved in:
+- **Mac**: `~/Library/Application Support/BTCRulesScript/config.json`
+- **Windows**: Same folder as the app
+
 ## License
 
 Private project - All rights reserved
-
-## Support
-
-For issues, check the GitHub Issues tab or contact the developer.

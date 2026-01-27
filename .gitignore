@@ -42,3 +42,5 @@ env
 
 # Data files
 monitors.json
+config.json
+btc_rules.json

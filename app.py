@@ -480,6 +480,9 @@ async def close_position():
 
 
 if __name__ == '__main__':
+    import webbrowser
+    import threading
+
     async def startup():
         await symbol_validator.initialize()
         tp_sl_monitor.start_all_monitors()
@@ -496,5 +499,13 @@ if __name__ == '__main__':
     print(f"\n[OK] Flask app running on: http://127.0.0.1:5000")
     print("[OK] BTC rules monitoring active")
     print("=" * 80 + "\n")
+
+    # Auto-open browser after a short delay
+    def open_browser():
+        import time
+        time.sleep(1.5)
+        webbrowser.open('http://127.0.0.1:5000')
+
+    threading.Thread(target=open_browser, daemon=True).start()
 
     app.run(debug=False, host='127.0.0.1', port=5000, threaded=True)
